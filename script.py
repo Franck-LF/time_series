@@ -7,27 +7,44 @@ import csv
 
 
 
-def test1(video_path):
+def code_Bertrand(video_path):
+    ''' Code provided by Bertrand - Display video '''
+
+    # Create an object "VideoCapture" with the video 
     cap = cv2.VideoCapture(video_path)
 
+    # cap.isOpened(): Returns true if video capturing has been initialized already
     while cap.isOpened():
-    # for i in range(10):
-        if not(cap.isOpened()):
-            break
 
+        # cap.read(): Grabs, decodes and returns the next video frame.
         ret, frame = cap.read()
+
+        # If there is no more frame BREAK THE LOOP
         if not ret:
             break
 
+        # Display the frame
         cv2.imshow("Video", frame)
-        if cv2.waitKey(10) & 0xFF == ord('q'):
+
+        # waitkey(delay): wait for 'delay' milisec AND
+        # if a key is pressed during that time return the ASCII code of the key (we apply a mask)
+        # otherwise return -1
+        # 
+        # the delay controls the speed of the video
+        if cv2.waitKey(5) & 0xFF == ord('q'):
             break
 
+    # Probably clean the memory of "cap" object
     cap.release()
+
+    # Straight forward
     cv2.destroyAllWindows()
 
 
-def test2(video_path, csv_name):
+
+
+
+def get_landmarks(video_path, csv_name):
     ''' 
        src: https://medium.com/@riddhisi238/real-time-pose-estimation-from-video-using-mediapipe-and-opencv-in-python-20f9f19c77a6
 
@@ -50,8 +67,14 @@ def test2(video_path, csv_name):
         if not ret:
             break
 
+        # Crop and resize the image
+        # frame = frame[70:, 200:-110]
+        # frame = cv2.resize(frame, (0, 0), fx = 2.5, fy = 2.5)
+
         # Convert the frame to RGB
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+        # stretch_near = cv2.resize(frame, (780, 540), interpolation = cv2.INTER_LINEAR)
 
         # Process the frame with MediaPipe Pose
         result = pose.process(frame_rgb)
@@ -67,16 +90,27 @@ def test2(video_path, csv_name):
 
         # Display the frame
         cv2.imshow("MediaPipe Pose", frame)
-        if cv2.waitKey(10) & 0xFF == ord('q'):
+        if cv2.waitKey(2) & 0xFF == ord('q'):
             break
     
-    # Save landmarks in CS vfile
-    df = pd.DataFrame(csv_data, columns = ['frame_number', 'landmark id', 'x', 'y', 'z'])
-    df.to_csv(csv_name)
-
     cap.release()
     cv2.destroyAllWindows()
 
+    # Save landmarks in CS vfile
+    df_landmarks = pd.DataFrame(csv_data, columns = ['frame_number', 'landmark_id', 'x', 'y', 'z'])
+    df_landmarks.to_csv(csv_name, sep=',', index=False)
+    return df_landmarks
+    
+
+
+
+def crop_video(video_path):
+    ''' 
+       src: https://medium.com/@sagarydv002/video-processing-with-opencv-cropping-and-resizing-window-51ca0eec43b7
+
+    '''
+    pass
+    
 
 
 
@@ -92,8 +126,8 @@ def test2(video_path, csv_name):
 if __name__ == '__main__':
 
     video_path = "videos/seq_a.mov"
-    # test1(video_path)
-    test2(video_path, "landmarks.csv")
+    # code_Bertrand(video_path)
+    df_landmarks = get_landmarks(video_path, "landmarks.csv")
 
 
 
