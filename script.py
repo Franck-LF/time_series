@@ -81,17 +81,21 @@ def get_max_range_of_ones(arr):
     return x_best, y_best
 
 
-def keep_a_few_landmarks(df):
+def keep_a_few_landmarks(df, landmarks_to_keep):
     ''' filter row of df to keep only a few landmarks '''
-    return df[df['landmark_id'].isin(landmarks_to_keep)]
+    df = df[df['landmark_id'].isin(landmarks_to_keep)]
+    return df.sort_values(by = ['landmark_id', 'frame_number'])
+
 
 def get_best_landmark_and_coord(df):
     '''
+        Detect stationnarity in signal
+
         Return:
          - best_landmark: id of the landmark showing the longest stationnarity,
          - best_coord (string): 'x', 'y' or 'z',
-         - best_first_frame (int): 
-         - best_last_frame (int): 
+         - best_first_frame (int): first frame of stationnarity,
+         - best_last_frame (int):  last frame of stationnarity.
     '''
     max_nb_frames = 0
     best_landmark = -1
@@ -131,7 +135,108 @@ def get_best_landmark_and_coord(df):
     return best_landmark, best_coord, best_first_frame, best_last_frame
 
 
+def get_longest_sationnarity_zone(df):
+    ''' Detect stationnarity in signal '''
+    max_nb_frames = 0
+    best_coord    = ''
+    best_first_frame = -1
+    best_last_frame  = -1
+    window   = 50
 
+    for coord in ['x', 'y', 'z']:
+        pvalues = []
+
+        for i in range(df.shape[0] - window):
+            res = adfuller(df[i:i+window:][coord].values)
+            pvalues.append(res[1])
+
+        mask = np.where(np.array(pvalues) < 0.045, 1, 0)
+        frame_start, frame_end = get_max_range_of_ones(mask)
+        # print(frame_start, frame_end)
+        frame_end   += window
+        frame_start += 10
+        frame_end   -= 10
+        # print(frame_start, frame_end)
+        nb_frames = frame_end - frame_start + 1 
+        # print('nb:', nb_frames)
+
+        if nb_frames > max_nb_frames:
+            max_nb_frames    = nb_frames
+            best_coord       = coord
+            best_first_frame = frame_start
+            best_last_frame  = frame_end
+
+    return best_coord, best_first_frame, best_last_frame
+
+
+def get_df_one_landmark(df, landmark):
+    ''' Extract df for only one landmark '''
+    df_one_landmark = df_landmarks[df_landmarks["landmark_id"] == landmark]
+    return df_one_landmark.sort_values(by = 'frame_number')
+
+
+def get_period(signal):
+    ''' Detect the period of a signal
+
+        Return: Integer (number of repetitions in the signal)
+
+        Arg:
+         - signal (numpy.array with floats): contains the signal.
+    '''
+
+    # For each split of the signal,
+    # we compute MAE, RMSE between different splits. 
+    # (Measure of difference between superposition of two signals)
+
+    metrics = []
+    for n_split in range(1, 40):
+        length = signal.shape[0] // n_split
+
+        s = signal[0:length]
+        mae, rmse = 0, 0
+
+        for i in range(n_split - 1):
+            s_ = signal[i*length : (i+1)*length]
+            rmse += root_mean_squared_error(s, s_)
+            mae += mean_absolute_error(s, s_)
+        
+        metrics.append([rmse, mae])
+
+def get_period_DS(signal):
+    ''' From DeepSeek '''
+    fs = 1000     # Fréquence d'échantillonnage (Hz)
+    T = 1.0 / fs  # Période d'échantillonnage
+
+    # Calcul de la FFT
+    N = len(signal)
+    yf = fft(signal)
+    xf = np.fft.fftfreq(N, T)[:N//2]  # Fréquences correspondantes
+
+    # Trouver la fréquence dominante (en ignorant la composante DC)
+    magnitude = 2.0/N * np.abs(yf[:N//2])
+    dominant_frequency = xf[np.argmax(magnitude[1:]) + 1]  # Ignorer la composante DC
+
+    # Calculer la période
+    period = 1.0 / dominant_frequency
+    return fs * period
+
+
+def get_array_frames_repetitions(frame_number, first_frame, last_frame, n_repetitions):
+    ''' 
+        Return first frame number and last frame number for each repetition.
+
+        Args:
+         - frame_number (int):
+         - first frame (int):
+         - last_frame (int):
+         - n_repetitions (int): number of repetitions in the signal. 
+    '''
+    arr_frames_reps = np.linspace(first_frame, last_frame, n_repetitions + 1)[:-1]
+    print(arr_frames_reps)
+    arr_frames_reps += 0.5 * (frame_number / n_repetitions)
+    print(arr_frames_reps)
+    arr_frames_reps = np.round(arr_frames_reps, 0).astype(int)
+    return arr_frames_reps
 
 
 def code_Bertrand(video_path):
@@ -169,7 +274,7 @@ def code_Bertrand(video_path):
 
 
 
-def get_landmarks(video_path):
+def get_landmarks_from_video(video_path):
     ''' Get landmarks of the video
 
         src: https://medium.com/@riddhisi238/real-time-pose-estimation-from-video-using-mediapipe-and-opencv-in-python-20f9f19c77a6
@@ -209,7 +314,7 @@ def get_landmarks(video_path):
 
 
 
-def display_video_with_landmarks(video_path, csv_name):
+def display_video_and_landmarks(video_path, csv_name):
     ''' Display a video, get the landmarks and write them in a csv file
 
         src: https://medium.com/@riddhisi238/real-time-pose-estimation-from-video-using-mediapipe-and-opencv-in-python-20f9f19c77a6
@@ -292,11 +397,34 @@ def display_video_with_landmarks(video_path, csv_name):
 
 def display_video_with_counter(video_path):
     ''' Display video with number of reps '''
-    df_landmarks = get_landmarks(video_path)
 
-    df = df[df["landmark_id"] == "NOSE"]
-    df = df[df['frame_number'].isin(range(frame_start, frame_end + 1))]
-    pass
+    # Get the landmarks from the video.
+    df_landmarks = get_landmarks_from_video(video_path)
+
+    # Extract data for only one landmark.
+    landmarks = ['NOSE']
+    df_one_landmark = keep_a_few_landmarks(df_landmarks, landmarks)
+
+    # ------------- #
+    # Stationnarity #
+    # ------------- #
+    
+    # Get first and last frames of the longest stationnarity zone.
+    best_coord, first_frame, last_frame = get_longest_sationnarity_zone(df_one_landmark)
+
+    # ------------- #
+    #  Seasonnality #
+    # ------------- #
+
+    # Extract all frames in the "stationnarity zone"
+    df_period = df_one_landmark[df_one_landmark['frame_number'].isin(range(first_frame, last_frame + 1))]
+
+    # Get the period (number of repetitions in the signal)
+    signal = df_period[best_coord].values
+    n_period = get_period_DS(signal)
+    nb_reps = int(signal.shape[0] / n_period)
+    arr_frames_reps = get_array_frames_repetitions(df_one_landmark.shape[0], first_frame, last_frame, nb_reps)
+
 
 
 
@@ -314,5 +442,5 @@ if __name__ == '__main__':
     video_path = "videos/seq_a.mov"
 
     # code_Bertrand(video_path)
-    # df_landmarks = get_landmarks(video_path)
-    df_landmarks = display_video_with_landmarks(video_path, "landmarks.csv")
+    # df_landmarks = get_landmarks_from_video(video_path)
+    df_landmarks = display_video_and_landmarks(video_path, "landmarks.csv")
