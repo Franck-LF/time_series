@@ -87,6 +87,12 @@ def keep_a_few_landmarks(df, landmarks_to_keep):
     return df.sort_values(by = ['landmark_id', 'frame_number'])
 
 
+def keep_one_landmark(df, landmark):
+    ''' filter row of df to keep only one landmark '''
+    df = df[df['landmark_id'] == landmark]
+    return df.sort_values(by = 'frame_number')
+
+
 def get_best_landmark_and_coord(df):
     '''
         Detect stationnarity in signal
@@ -97,6 +103,7 @@ def get_best_landmark_and_coord(df):
          - best_first_frame (int): first frame of stationnarity,
          - best_last_frame (int):  last frame of stationnarity.
     '''
+    assert False
     max_nb_frames = 0
     best_landmark = -1
     best_coord    = ''
@@ -117,13 +124,10 @@ def get_best_landmark_and_coord(df):
 
             mask = np.where(np.array(pvalues) < 0.045, 1, 0)
             frame_start, frame_end = get_max_range_of_ones(mask)
-            # print(frame_start, frame_end)
             frame_end += window
             frame_start += 10
             frame_end   -= 10
-            # print(frame_start, frame_end)
             nb_frames = frame_end - frame_start + 1 
-            print('nb:', nb_frames)
 
             if nb_frames > max_nb_frames:
                 max_nb_frames = nb_frames
@@ -152,13 +156,10 @@ def get_longest_sationnarity_zone(df):
 
         mask = np.where(np.array(pvalues) < 0.045, 1, 0)
         frame_start, frame_end = get_max_range_of_ones(mask)
-        # print(frame_start, frame_end)
         frame_end   += window
         frame_start += 10
         frame_end   -= 10
-        # print(frame_start, frame_end)
         nb_frames = frame_end - frame_start + 1 
-        # print('nb:', nb_frames)
 
         if nb_frames > max_nb_frames:
             max_nb_frames    = nb_frames
@@ -169,10 +170,12 @@ def get_longest_sationnarity_zone(df):
     return best_coord, best_first_frame, best_last_frame
 
 
-def get_df_one_landmark(df, landmark):
-    ''' Extract df for only one landmark '''
-    df_one_landmark = df_landmarks[df_landmarks["landmark_id"] == landmark]
-    return df_one_landmark.sort_values(by = 'frame_number')
+def get_dic_frame_reps(first_frame, last_frame, nb_reps):
+    ''' Compute a dictionary with the frame number and the number of the repetition to be displayed on the frame '''
+    arr_frames_reps = np.linspace(first_frame, last_frame, nb_reps + 1).astype(int)
+    dic_frame_reps = {arr_frames_reps[i]:str(i+1) for i in range(len(arr_frames_reps) - 1)}
+    dic_frame_reps[arr_frames_reps[-1]] = ''
+    return dic_frame_reps
 
 
 def get_period(signal):
@@ -183,7 +186,7 @@ def get_period(signal):
         Arg:
          - signal (numpy.array with floats): contains the signal.
     '''
-
+    assert False
     # For each split of the signal,
     # we compute MAE, RMSE between different splits. 
     # (Measure of difference between superposition of two signals)
@@ -201,9 +204,11 @@ def get_period(signal):
             mae += mean_absolute_error(s, s_)
         
         metrics.append([rmse, mae])
+        # To Finish
 
-def get_period_DS(signal):
-    ''' From DeepSeek '''
+
+def get_period_FFT(signal):
+    ''' From DeepSeek (for explanations see file FFT.ipynb) '''
     fs = 1000     # Fréquence d'échantillonnage (Hz)
     T = 1.0 / fs  # Période d'échantillonnage
 
@@ -221,29 +226,11 @@ def get_period_DS(signal):
     return fs * period
 
 
-def get_array_frames_repetitions(frame_number, first_frame, last_frame, n_repetitions):
-    ''' 
-        Return first frame number and last frame number for each repetition.
-
-        Args:
-         - frame_number (int):
-         - first frame (int):
-         - last_frame (int):
-         - n_repetitions (int): number of repetitions in the signal. 
-    '''
-    arr_frames_reps = np.linspace(first_frame, last_frame, n_repetitions + 1)[:-1]
-    print(arr_frames_reps)
-    arr_frames_reps += 0.5 * (frame_number / n_repetitions)
-    print(arr_frames_reps)
-    arr_frames_reps = np.round(arr_frames_reps, 0).astype(int)
-    return arr_frames_reps
-
-
-def code_Bertrand(video_path):
+def code_Bertrand(video_folder, video_name):
     ''' Code provided by Bertrand - Display video '''
 
     # Create an object "VideoCapture" with the video 
-    cap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(video_folder + video_name)
 
     # cap.isOpened(): Returns true if video capturing has been initialized already
     while cap.isOpened():
@@ -273,21 +260,20 @@ def code_Bertrand(video_path):
     cv2.destroyAllWindows()
 
 
-
-def get_landmarks_from_video(video_path):
+def get_landmarks_from_video(video_folder, video_name):
     ''' Get landmarks of the video
 
         src: https://medium.com/@riddhisi238/real-time-pose-estimation-from-video-using-mediapipe-and-opencv-in-python-20f9f19c77a6
 
         return: dataframe with landmarks of the video
-        Arg: video_path (string): path of the video to analyse
+        Arg: video_folder (string): folder path of the video to analyse
     '''
     # Initialize MediaPipe Pose and Drawing utilities
     mp_pose = mp.solutions.pose
     pose = mp_pose.Pose()
 
     # Open the video file
-    cap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(video_folder + video_name)
 
     frame_number = 0
     csv_data = []
@@ -301,29 +287,30 @@ def get_landmarks_from_video(video_path):
         frame = cv2.resize(frame, (0, 0), fx = 2.0, fy = 2.0)
         result = pose.process(frame)
 
-        # Draw the pose landmarks on the frame
+        # Draw the pose landmarks on the frame.
         if result.pose_landmarks:
             for idx, landmark in enumerate(result.pose_landmarks.landmark):
                 csv_data.append([frame_number, mp_pose.PoseLandmark(idx).name, landmark.x, landmark.y, landmark.z])
             frame_number += 1
 
     cap.release()
+    # Save landmarks infos in csv file.
+    df_landmarks = pd.DataFrame(csv_data, columns = ['frame_number', 'landmark_id', 'x', 'y', 'z'])
+    df_landmarks.to_csv(video_folder + 'landmarks_' + video_name[:-4] + '.csv', sep=',', index=False)
     return df_landmarks
-    
 
 
-
-
-def display_video_and_landmarks(video_path, csv_name):
+def display_video_and_landmarks(video_folder, video_name):
     ''' Display a video, get the landmarks and write them in a csv file
 
         src: https://medium.com/@riddhisi238/real-time-pose-estimation-from-video-using-mediapipe-and-opencv-in-python-20f9f19c77a6
 
         return: dataframe with landmarks of the video
         Args:
-         - video_path (string): path of the video to analyse,
+         - video_folder (string): folfer path of the video to analyse,
          - csv_name (string):   name of the file to save the data.
     '''
+    assert(False)
     frames_to_display = [100, 126, 151, 177, 203, 228, 254, 280, 306, 331]
 
     # Initialize MediaPipe Pose and Drawing utilities
@@ -332,7 +319,7 @@ def display_video_and_landmarks(video_path, csv_name):
     pose = mp_pose.Pose()
 
     # Open the video file
-    cap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(video_folder + video_name)
 
     frame_number = 0
     counter = 0
@@ -389,21 +376,97 @@ def display_video_and_landmarks(video_path, csv_name):
 
     # Save landmarks in CS vfile
     df_landmarks = pd.DataFrame(csv_data, columns = ['frame_number', 'landmark_id', 'x', 'y', 'z'])
-    df_landmarks.to_csv(csv_name, sep=',', index=False)
+    df_landmarks.to_csv(video_folder + 'landmarks_' + video_name[:-4] + '.csv', sep=',', index=False)
     return df_landmarks
     
 
+def display_video_with_repetition_counter(video_folder, video_name, dic_frame_reps):
+    ''' Display counter for each reps on the video
+    
+        Args:
+         - video_folder (string): folder path of the video to analyse,
+         - arr_frames (numpy.array): .
+    '''
+    # Open the video file
+    cap = cv2.VideoCapture(video_folder + video_name)
+
+    frame_number = 0
+    bDisplay = False
+    str_to_display = ''
+
+    while cap.isOpened():
+
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        # Crop and resize the image
+        frame = cv2.resize(frame, (0, 0), fx = 2, fy = 2)
+
+        # Draw
+        if frame_number in dic_frame_reps.keys():
+            bDisplay = dic_frame_reps[frame_number] != ''
+            str_to_display = dic_frame_reps[frame_number]
+            
+        if bDisplay:
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            frame = cv2.putText(frame, str_to_display, (80, 250), font, 7, (0,255,255), 5, cv2.LINE_AA)
+
+        frame_number += 1
+
+        # Display the frame
+        cv2.imshow("MediaPipe Pose", frame)
+        if cv2.waitKey(10) & 0xFF == ord('q'):
+            break
+    
+    cap.release()
+    cv2.destroyAllWindows()
 
 
-def display_video_with_counter(video_path):
-    ''' Display video with number of reps '''
+def read_video_and_display_with_repetition_counter(video_folder, video_name):
+    ''' Analyse a video and display it with number of reps '''
 
-    # Get the landmarks from the video.
-    df_landmarks = get_landmarks_from_video(video_path)
+    # Params
+    b_compute_landmarks      = False
+    b_compute_frame_counters = False
+
+    df_landmarks   = None
+    dic_frame_reps = {}
+
+    if not(b_compute_frame_counters):
+        frame_reps_file_name = 'frame_reps_' + video_name[:-4] + '.npy'
+        # print(frame_reps_file_name)
+        # print(os.listdir(video_folder))
+
+        # Read frame_reps from file (if exists).
+        if frame_reps_file_name in os.listdir(video_folder):
+            print(f'Read file with the reps: {frame_reps_file_name}')
+            with open(video_folder + frame_reps_file_name, 'rb') as f:
+                dic_frame_reps = np.load(f, allow_pickle = True)[0]
+                print('ok', type(dic_frame_reps))
+                print('ok', dic_frame_reps)
+                return
+
+            display_video_with_repetition_counter(video_folder, video_name, dic_frame_reps)
+            return
+
+    landmarks_file_name = 'landmarks_' + video_name[:-4] + '.csv'
+
+    # def read_landmarks_from_file(file_name):
+    #     return pd.read_csv(video_folder + landmarks_file_name, sep = ',')
+
+    if not(b_compute_landmarks) and (landmarks_file_name in os.listdir(video_folder)):
+        # Read landmarks infos from file (if exists).
+        print(f'Read file with the landmarks: {landmarks_file_name}')
+        df_landmarks = pd.read_csv(video_folder + landmarks_file_name, sep = ',')
+
+    else:
+        # Get the landmarks from the video.
+        df_landmarks = get_landmarks_from_video(video_folder, video_name)
 
     # Extract data for only one landmark.
-    landmarks = ['NOSE']
-    df_one_landmark = keep_a_few_landmarks(df_landmarks, landmarks)
+    landmark = 'NOSE' # Should detect which landmark got the biggest variation / periodicity
+    df_one_landmark = keep_one_landmark(df_landmarks, landmark)
 
     # ------------- #
     # Stationnarity #
@@ -419,11 +482,23 @@ def display_video_with_counter(video_path):
     # Extract all frames in the "stationnarity zone"
     df_period = df_one_landmark[df_one_landmark['frame_number'].isin(range(first_frame, last_frame + 1))]
 
-    # Get the period (number of repetitions in the signal)
+    # Get the period
     signal = df_period[best_coord].values
-    n_period = get_period_DS(signal)
+    n_period = get_period_FFT(signal)
+
+    # Get number of repetitions in the signal
     nb_reps = int(signal.shape[0] / n_period)
-    arr_frames_reps = get_array_frames_repetitions(df_one_landmark.shape[0], first_frame, last_frame, nb_reps)
+    print("Nb reps:", nb_reps)
+
+    # ----------------- #
+    #  Display counter  #
+    # ----------------- #
+    dic_frame_reps = get_dic_frame_reps(first_frame, last_frame, nb_reps)
+    with open(video_folder + 'frame_reps_' + video_name[:-4] + '.npy', 'wb') as f:
+        np.save(f, dic_frame_reps)
+    
+    display_video_with_repetition_counter(video_folder, video_name, dic_frame_reps)
+    
 
 
 
@@ -439,8 +514,15 @@ def display_video_with_counter(video_path):
 
 if __name__ == '__main__':
 
-    video_path = "videos/seq_a.mov"
+    video_folder = "videos\\"
+    video_name = "seq_a.mov"
+    # video_name = "seq_b.mov"
+    # video_name = "seq_tractions.mov"
+    # video_name = "seq_multi_exos.mov"
 
-    # code_Bertrand(video_path)
-    # df_landmarks = get_landmarks_from_video(video_path)
-    df_landmarks = display_video_and_landmarks(video_path, "landmarks.csv")
+    # code_Bertrand(video_folder, video_name)
+    # get_landmarks_from_video(video_folder, video_name)
+    # display_video_and_landmarks(video_folder, video_name)
+    read_video_and_display_with_repetition_counter(video_folder, video_name)
+
+
